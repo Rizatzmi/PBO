@@ -244,6 +244,10 @@ class SistemPerpus:
     def info_anggota(self):
         print("\n=== INFO ANGGOTA ===")
 
+        if not self.data_anggota:
+            print("Belum ada data anggota.")
+            return
+
         # Input & validasi nomor anggota (loop sampai ditemukan)
         while True:
             nomor_anggota = self.input_angka("Masukkan Nomor Anggota: ")
