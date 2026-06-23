@@ -1,12 +1,6 @@
-"""
-=============================================================
-  FILE: main.py
-  Deskripsi: Program Utama -- Input objek & simulasi Player
-  Import dari: music_classes.py
-=============================================================
-"""
-
-from music_classes import Lagu, Playlist, Player
+from music_classes import Lagu, Podcast, Playlist, Player
+import threading
+import time
 
 
 # ─────────────────────────────────────────────
@@ -26,13 +20,12 @@ def input_tidak_kosong(prompt: str) -> str:
 
 
 def input_durasi() -> int:
-    """Input durasi format MM:SS dengan validasi."""
     while True:
         raw = input("  Durasi (MM:SS): ").strip()
         try:
             return Lagu.parse_durasi(raw)
         except ValueError as e:
-            print(f"  Format tidak valid -- {e}. Contoh: 03:45")
+            print(f"  Format tidak valid -- {e}.")
 
 
 def input_lagu() -> Lagu:
@@ -44,83 +37,132 @@ def input_lagu() -> Lagu:
     return Lagu(judul, artis, durasi, genre)
 
 
-def input_playlist(lagu_pool: list) -> Playlist:
+def input_podcast() -> Podcast:
+    print("\n  [Input Podcast Baru]")
+    judul = input_tidak_kosong("  Judul Podcast : ")
+    host  = input_tidak_kosong("  Host           : ")
+    durasi = input_durasi()
+    while True:
+        ep_raw = input("  Episode (angka): ").strip()
+        if ep_raw.isdigit() and int(ep_raw) > 0:
+            episode = int(ep_raw)
+            break
+        print("  Episode harus angka positif.")
+    return Podcast(judul, host, durasi, episode)
+
+
+def pilih_media_untuk_playlist(pl: Playlist, media_pool: list) -> int:
+    print("\n  Pilih item (nomor dipisah koma):")
+    for i, m in enumerate(media_pool, 1):
+        print(f"  {i}. {m}")
+
+    while True:
+        raw = input("  Pilihan: ").strip()
+        if not raw:
+            print("  Harus memilih minimal 1 item.")
+            continue
+
+        # Validasi pemisah: tolak '.' dan karakter non-valid
+        token_list = []
+        valid = True
+        for token in raw.replace(",", " ").split():
+            if not token.isdigit():
+                print(f"  '{token}' bukan angka yang valid. Gunakan koma sebagai pemisah (contoh: 1,2,3)")
+                valid = False
+                break
+            token_list.append(int(token) - 1)
+
+        if not valid:
+            continue
+
+        # Validasi rentang
+        invalid = [t + 1 for t in token_list if not (0 <= t < len(media_pool))]
+        if invalid:
+            print(f"  Nomor tidak valid: {invalid}. Pilih antara 1 dan {len(media_pool)}.")
+            continue
+
+        # Semua valid, tambahkan
+        ditambahkan = 0
+        for idx in token_list:
+            pl.tambah_lagu(media_pool[idx])
+            print(f"  Ditambahkan: {media_pool[idx]}")
+            ditambahkan += 1
+        return ditambahkan
+
+
+def input_playlist(media_pool: list) -> Playlist | None:
     print("\n  [Input Playlist Baru]")
+
+    if not media_pool:
+        print("  Belum ada lagu/podcast. Tambahkan item terlebih dahulu sebelum membuat playlist.")
+        return None
+
     nama = input_tidak_kosong("  Nama Playlist: ")
     pl   = Playlist(nama)
-    if not lagu_pool:
-        print("  Belum ada lagu. Playlist dibuat kosong.")
-        return pl
-    pilih_lagu_untuk_playlist(pl, lagu_pool)
+
+    jumlah = pilih_media_untuk_playlist(pl, media_pool)
+    if jumlah == 0:
+        print("  Playlist tidak dibuat karena tidak ada item yang dipilih.")
+        return None
+
     return pl
-
-
-def pilih_lagu_untuk_playlist(pl: Playlist, lagu_pool: list):
-    """Tampilkan daftar lagu dan tambahkan pilihan ke playlist."""
-    print("\n  Pilih lagu (nomor dipisah koma, kosong=lewati):")
-    for i, l in enumerate(lagu_pool, 1):
-        print(f"  {i}. {l}")
-    raw = input("  Pilihan: ").strip()
-    if not raw:
-        return
-    try:
-        for x in raw.split(","):
-            idx = int(x.strip()) - 1
-            if 0 <= idx < len(lagu_pool):
-                pl.tambah_lagu(lagu_pool[idx])
-                print(f"  Ditambahkan: {lagu_pool[idx]}")
-            else:
-                print(f"  Nomor {idx+1} tidak valid, dilewati.")
-    except ValueError:
-        print("  Format tidak valid, tidak ada lagu ditambahkan.")
 
 
 # ─────────────────────────────────────────────
 #  MENU DATA
 # ─────────────────────────────────────────────
 
-def menu_edit_lagu(lagu_pool: list):
-    if not lagu_pool:
-        print("  Belum ada lagu.")
+def menu_edit_media(media_pool: list):
+    if not media_pool:
+        print("  Belum ada lagu/podcast.")
         return
-    print("\n  Pilih lagu yang akan diedit:")
-    for i, l in enumerate(lagu_pool, 1):
-        print(f"  {i}. {l}")
+    print("\n  Pilih item yang akan diedit:")
+    for i, m in enumerate(media_pool, 1):
+        print(f"  {i}. {m}")
     try:
         idx = int(input("  Nomor: ").strip()) - 1
-        if not (0 <= idx < len(lagu_pool)):
+        if not (0 <= idx < len(media_pool)):
             print("  Nomor tidak valid.")
             return
     except ValueError:
         print("  Input tidak valid.")
         return
 
-    lagu = lagu_pool[idx]
-    print(f"\n  Edit lagu: {lagu}")
+    item = media_pool[idx]
+    print(f"\n  Edit item: {item}")
     print("  (Kosongkan untuk mempertahankan nilai lama)")
 
-    judul_baru = input(f"  Judul [{lagu.judul}]: ").strip()
-    artis_baru = input(f"  Artis [{lagu.artis}]: ").strip()
-    genre_baru = input(f"  Genre [{lagu.genre}]: ").strip()
-    print(f"  Durasi saat ini: {lagu.format_durasi()}")
-    durasi_raw = input("  Durasi baru (MM:SS, kosong=skip): ").strip()
+    if isinstance(item, Lagu):
+        judul_baru = input(f"  Judul [{item.judul}]: ").strip()
+        artis_baru = input(f"  Artis [{item.artis}]: ").strip()
+        genre_baru = input(f"  Genre [{item.genre}]: ").strip()
+        if judul_baru:
+            item.judul = judul_baru
+        if artis_baru:
+            item.artis = artis_baru
+        if genre_baru:
+            item.genre = genre_baru
 
-    if judul_baru:
-        lagu.judul = judul_baru
-    if artis_baru:
-        lagu.artis = artis_baru
-    if genre_baru:
-        lagu.genre = genre_baru
+    elif isinstance(item, Podcast):
+        judul_baru = input(f"  Judul [{item.judul}]: ").strip()
+        host_baru  = input(f"  Host  [{item.host}]: ").strip()
+        if judul_baru:
+            item.judul = judul_baru
+        if host_baru:
+            item.host = host_baru
+
+    print(f"  Durasi saat ini: {item.format_durasi()}")
+    durasi_raw = input("  Durasi baru (MM:SS, kosong=skip): ").strip()
     if durasi_raw:
         try:
-            lagu.set_durasi(Lagu.parse_durasi(durasi_raw))
+            item.set_durasi(Lagu.parse_durasi(durasi_raw))
         except ValueError as e:
             print(f"  Durasi tidak diubah -- {e}")
 
-    print(f"  Lagu berhasil diperbarui: {lagu}")
+    print(f"  Item berhasil diperbarui: {item}")
 
 
-def menu_edit_playlist(playlist_pool: list, lagu_pool: list):
+def menu_edit_playlist(playlist_pool: list, media_pool: list):
     if not playlist_pool:
         print("  Belum ada playlist.")
         return
@@ -142,8 +184,8 @@ def menu_edit_playlist(playlist_pool: list, lagu_pool: list):
     while True:
         print("\n  [Edit Playlist]")
         print("  1. Ganti nama")
-        print("  2. Tambah lagu")
-        print("  3. Hapus lagu")
+        print("  2. Tambah item")
+        print("  3. Hapus item")
         print("  0. Selesai")
         pilihan = input("  Pilihan: ").strip()
 
@@ -153,20 +195,20 @@ def menu_edit_playlist(playlist_pool: list, lagu_pool: list):
             print(f"  Nama diubah menjadi: {pl.nama}")
 
         elif pilihan == "2":
-            if not lagu_pool:
-                print("  Belum ada lagu.")
+            if not media_pool:
+                print("  Belum ada lagu/podcast.")
             else:
-                pilih_lagu_untuk_playlist(pl, lagu_pool)
+                pilih_media_untuk_playlist(pl, media_pool)
 
         elif pilihan == "3":
-            aktif = pl.get_active_list()
+            aktif = pl.get_original_list()
             if not aktif:
                 print("  Playlist kosong.")
             else:
-                print("\n  Pilih lagu yang dihapus:")
-                for i, l in enumerate(aktif, 1):
-                    print(f"  {i}. {l}")
-                judul = input("  Judul lagu: ").strip()
+                print("\n  Pilih item yang dihapus:")
+                for i, m in enumerate(aktif, 1):
+                    print(f"  {i}. {m}")
+                judul = input("  Judul item: ").strip()
                 if pl.hapus_lagu(judul):
                     print(f"  '{judul}' dihapus dari playlist.")
                 else:
@@ -178,40 +220,47 @@ def menu_edit_playlist(playlist_pool: list, lagu_pool: list):
             print("  Pilihan tidak valid.")
 
 
-def menu_data(lagu_pool: list, playlist_pool: list):
+def menu_data(media_pool: list, playlist_pool: list):
     while True:
         print("\n  [MENU DATA]")
         print("  1. Tambah Lagu")
-        print("  2. Tambah Playlist")
-        print("  3. Edit Lagu")
-        print("  4. Edit Playlist")
-        print("  5. Lihat Semua Data")
+        print("  2. Tambah Podcast")
+        print("  3. Tambah Playlist")
+        print("  4. Edit Lagu/Podcast")
+        print("  5. Edit Playlist")
+        print("  6. Lihat Semua Data")
         print("  0. Kembali")
         pilihan = input("  Pilihan: ").strip()
 
         if pilihan == "1":
             lagu = input_lagu()
-            lagu_pool.append(lagu)
+            media_pool.append(lagu)
             print(f"  Lagu ditambahkan: {lagu}")
 
         elif pilihan == "2":
-            pl = input_playlist(lagu_pool)
-            playlist_pool.append(pl)
-            print(f"  Playlist dibuat: {pl.nama}")
+            podcast = input_podcast()
+            media_pool.append(podcast)
+            print(f"  Podcast ditambahkan: {podcast}")
 
         elif pilihan == "3":
-            menu_edit_lagu(lagu_pool)
+            pl = input_playlist(media_pool)
+            if pl is not None:
+                playlist_pool.append(pl)
+                print(f"  Playlist dibuat: {pl.nama} ({pl.total_lagu} item)")
 
         elif pilihan == "4":
-            menu_edit_playlist(playlist_pool, lagu_pool)
+            menu_edit_media(media_pool)
 
         elif pilihan == "5":
-            print("\n  === DAFTAR LAGU ===")
-            if lagu_pool:
-                for i, l in enumerate(lagu_pool, 1):
-                    print(f"  {i}. {l.get_info()}")
+            menu_edit_playlist(playlist_pool, media_pool)
+
+        elif pilihan == "6":
+            print("\n  === DAFTAR LAGU & PODCAST ===")
+            if media_pool:
+                for i, m in enumerate(media_pool, 1):
+                    print(f"  {i}. {m.get_info()}")
             else:
-                print("  (Belum ada lagu)")
+                print("  (Belum ada lagu/podcast)")
             print("\n  === DAFTAR PLAYLIST ===")
             if playlist_pool:
                 for pl in playlist_pool:
@@ -226,23 +275,54 @@ def menu_data(lagu_pool: list, playlist_pool: list):
 
 
 # ─────────────────────────────────────────────
-#  HELPER TAMPIL PLAYLIST
+#  TAMPILAN PLAYLIST
 # ─────────────────────────────────────────────
 
-def _tampilkan_playlist(pl: Playlist, current_index: int = -1):
-    """Tampilkan isi playlist. Tandai lagu aktif jika current_index >= 0."""
+def _tampilkan_playlist(pl: Playlist, active_list: list = None, current_index: int = -1):
+    daftar = active_list if active_list is not None else pl.get_original_list()
+    total_detik = sum(item.get_duration() for item in daftar)
+    total_fmt   = f"{total_detik // 60:02d}:{total_detik % 60:02d}"
+
     print(f"\n  {'─'*48}")
     print(f"  Playlist : {pl.nama}")
-    print(f"  Total    : {pl.total_lagu} lagu | Durasi: {pl.total_durasi}")
+    print(f"  Total    : {len(daftar)} lagu | Durasi: {total_fmt}")
     print(f"  Shuffle  : {'ON' if pl.is_shuffled else 'OFF'}")
     print(f"  {'─'*48}")
-    aktif = pl.get_active_list()
-    if not aktif:
+    if not daftar:
         print("  (Playlist kosong)")
-    for i, item in enumerate(aktif):
-        marker = " >> PLAYING" if i == current_index else ""
+    for i, item in enumerate(daftar):
+        marker = " << NOW PLAYING" if i == current_index else ""
         print(f"  {i+1:>2}. {item}{marker}")
     print(f"  {'─'*48}")
+
+
+# ─────────────────────────────────────────────
+#  TIMER DISPLAY
+# ─────────────────────────────────────────────
+
+_display_lock = threading.Lock()
+
+
+def _print_timer(player: Player):
+    if player.status == Player.PLAYING and player.current:
+        sisa = player.format_sisa()
+        total = player.current.format_durasi()
+        persen = 0
+        if player.current.get_duration() > 0:
+            persen = max(0, 100 - int(player.sisa_detik / player.current.get_duration() * 100))
+        bar_len  = 20
+        filled   = int(bar_len * persen / 100)
+        bar      = "#" * filled + "-" * (bar_len - filled)
+        with _display_lock:
+            print(f"\r  [{bar}] {persen:3d}%  sisa: {sisa} / {total}   ", end="", flush=True)
+
+
+def _timer_display_loop(player: Player, stop_evt: threading.Event):
+    while not stop_evt.is_set():
+        if player.status == Player.PLAYING:
+            _print_timer(player)
+        time.sleep(1)
+    print("\r" + " " * 60 + "\r", end="", flush=True)
 
 
 # ─────────────────────────────────────────────
@@ -250,66 +330,102 @@ def _tampilkan_playlist(pl: Playlist, current_index: int = -1):
 # ─────────────────────────────────────────────
 
 def menu_player(player: Player, playlist_pool: list):
-    while True:
-        print(f"\n  [MENU PLAYER]  Status: {player.status}")
-        print("  1. Muat Playlist")
-        print("  2. Play")
-        print("  3. Pause")
-        print("  4. Next")
-        print("  5. Prev")
-        print("  6. Shuffle")
-        print("  7. Lihat Playlist & Posisi")
-        print("  0. Kembali")
-        pilihan = input("  Pilihan: ").strip()
+    # Thread display timer
+    stop_display = threading.Event()
+    display_thread = threading.Thread(
+        target=_timer_display_loop, args=(player, stop_display), daemon=True
+    )
+    display_thread.start()
 
-        if pilihan == "1":
-            if not playlist_pool:
-                print("  Belum ada playlist.")
+    # Callback auto-next saat lagu habis
+    def on_song_end():
+        # Jeda sebentar agar timer sempat sampai 00:00
+        time.sleep(0.5)
+        ok, msg = player.next()
+        with _display_lock:
+            print(f"\n  [Auto] {msg}")
+
+    player.set_auto_next_callback(on_song_end)
+
+    try:
+        while True:
+            print(f"\n\n  [MENU PLAYER]  Status: {player.status}"
+                  + (" | Shuffle ON" if player.is_shuffled else ""))
+            print("  1. Muat Playlist")
+            print("  2. Play")
+            print("  3. Pause")
+            print("  4. Next")
+            print("  5. Prev")
+            print("  6. Shuffle (acak ulang)")
+            print("  7. Unshuffle (urutan asli)")
+            print("  8. Now Playing")
+            print("  0. Kembali")
+            pilihan = input("  Pilihan: ").strip()
+
+            if pilihan == "1":
+                if not playlist_pool:
+                    print("  Belum ada playlist.")
+                else:
+                    for i, pl in enumerate(playlist_pool, 1):
+                        print(f"  {i}. {pl}")
+                    try:
+                        idx = int(input("  Nomor: ")) - 1
+                        if 0 <= idx < len(playlist_pool):
+                            player.load(playlist_pool[idx])
+                            print(f"  Playlist '{playlist_pool[idx].nama}' dimuat.")
+                        else:
+                            print("  Nomor tidak valid.")
+                    except ValueError:
+                        print("  Input tidak valid.")
+
+            elif pilihan == "2":
+                ok, pesan = player.play()
+                print(f"  {pesan}")
+
+            elif pilihan == "3":
+                ok, pesan = player.pause()
+                print(f"  {pesan}")
+
+            elif pilihan == "4":
+                ok, pesan = player.next()
+                print(f"  {pesan}")
+
+            elif pilihan == "5":
+                ok, pesan = player.prev()
+                print(f"  {pesan}")
+
+            elif pilihan == "6":
+                ok, pesan = player.shuffle()
+                print(f"  {pesan}")
+
+            elif pilihan == "7":
+                ok, pesan = player.unshuffle()
+                print(f"  {pesan}")
+
+            elif pilihan == "8":
+                pl = player.playlist
+                if pl is None:
+                    print("  Tidak ada playlist yang dimuat.")
+                else:
+                    # Tampilkan playlist + posisi lagu aktif
+                    idx = player.current_index if player.status != Player.STOPPED else -1
+                    _tampilkan_playlist(pl, active_list=player.active_list, current_index=idx)
+                    # Info timer
+                    if player.status == Player.PLAYING and player.current:
+                        print(f"  Lagu    : {player.current}")
+                        print(f"  Status  : {player.status}")
+                        print(f"  Sisa    : {player.format_sisa()} / {player.current.format_durasi()}")
+                    elif player.status == Player.PAUSED and player.current:
+                        print(f"  Lagu    : {player.current}")
+                        print(f"  Status  : PAUSED -- sisa {player.format_sisa()}")
+
+            elif pilihan == "0":
+                break
             else:
-                for i, pl in enumerate(playlist_pool, 1):
-                    print(f"  {i}. {pl}")
-                try:
-                    idx = int(input("  Nomor: ")) - 1
-                    if 0 <= idx < len(playlist_pool):
-                        player.load(playlist_pool[idx])
-                        print(f"  Playlist '{playlist_pool[idx].nama}' dimuat.")
-                    else:
-                        print("  Nomor tidak valid.")
-                except ValueError:
-                    print("  Input tidak valid.")
-
-        elif pilihan == "2":
-            ok, pesan = player.play()
-            print(f"  {pesan}")
-
-        elif pilihan == "3":
-            ok, pesan = player.pause()
-            print(f"  {pesan}")
-
-        elif pilihan == "4":
-            ok, pesan = player.next()
-            print(f"  {pesan}")
-
-        elif pilihan == "5":
-            ok, pesan = player.prev()
-            print(f"  {pesan}")
-
-        elif pilihan == "6":
-            ok, pesan = player.shuffle()
-            print(f"  {pesan}")
-
-        elif pilihan == "7":
-            pl = player.playlist
-            if pl is None:
-                print("  Tidak ada playlist yang dimuat.")
-            else:
-                idx = player.current_index if player.status != Player.STOPPED else -1
-                _tampilkan_playlist(pl, current_index=idx)
-
-        elif pilihan == "0":
-            break
-        else:
-            print("  Pilihan tidak valid.")
+                print("  Pilihan tidak valid.")
+    finally:
+        stop_display.set()
+        player.set_auto_next_callback(None)
 
 
 # ─────────────────────────────────────────────
@@ -321,7 +437,7 @@ def main():
     print("  APLIKASI MUSIK PLAYER")
     garis()
 
-    lagu_pool:     list[Lagu]     = []
+    media_pool:    list     = []
     playlist_pool: list[Playlist] = []
     player = Player()
 
@@ -329,13 +445,13 @@ def main():
         garis()
         print("  MENU UTAMA")
         garis()
-        print("  1. Data (Lagu & Playlist)")
+        print("  1. Data (Lagu, Podcast & Playlist)")
         print("  2. Player")
         print("  0. Keluar")
         pilihan = input("  Pilihan: ").strip()
 
         if pilihan == "1":
-            menu_data(lagu_pool, playlist_pool)
+            menu_data(media_pool, playlist_pool)
         elif pilihan == "2":
             menu_player(player, playlist_pool)
         elif pilihan == "0":

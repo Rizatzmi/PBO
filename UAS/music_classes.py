@@ -1,25 +1,14 @@
-"""
-=============================================================
-  FILE: music_classes.py
-  Deskripsi: Deklarasi OOP - Kelas untuk Aplikasi Musik
-  Pilar OOP: Enkapsulasi, Inheritance, Abstraction, Polymorphism
-=============================================================
-"""
-
 from abc import ABC, abstractmethod
 import random
+import threading
+import time
 
 
 # ============================================================
-# ABSTRACTION -- Abstract Base Class
+# ABSTRACTION 
 # ============================================================
 
 class Media(ABC):
-    """
-    Abstract class sebagai kontrak dasar item media.
-    ABSTRACTION: method get_info() dan __str__() wajib
-    diimplementasikan oleh subclass.
-    """
 
     @abstractmethod
     def get_info(self) -> str:
@@ -35,35 +24,27 @@ class Media(ABC):
 
 
 # ============================================================
-# CLASS: Lagu  (Enkapsulasi + Inheritance)
+# CLASS: Lagu 
 # ============================================================
 
 class Lagu(Media):
-    """
-    Representasi sebuah lagu.
-    ENKAPSULASI : atribut privat diakses via getter/setter.
-    INHERITANCE : mewarisi Media dan mengimplementasikan
-                  semua method abstraknya.
-    """
 
     @staticmethod
     def parse_durasi(durasi_str: str) -> int:
-        """
-        Parse format MM:SS menjadi total detik.
-        Raise ValueError jika format tidak valid.
-        """
         bagian = durasi_str.strip().split(":")
         if len(bagian) != 2:
-            raise ValueError("Format harus MM:SS")
+            raise ValueError("Format harus MM:SS (contoh: 03:45)")
         menit_str, detik_str = bagian
         if not menit_str.isdigit() or not detik_str.isdigit():
-            raise ValueError("Menit dan detik harus angka")
+            raise ValueError("Menit dan detik harus berupa angka")
         menit = int(menit_str)
         detik = int(detik_str)
-        if detik < 0 or detik > 59:
+        if not (0 <= detik <= 59):
             raise ValueError("Detik harus antara 00 dan 59")
         if menit < 0:
             raise ValueError("Menit tidak boleh negatif")
+        if menit == 0 and detik == 0:
+            raise ValueError("Durasi tidak boleh 00:00")
         return menit * 60 + detik
 
     def __init__(self, judul: str, artis: str, durasi: int, genre: str = "Unknown"):
@@ -90,7 +71,7 @@ class Lagu(Media):
     def play_count(self) -> int:
         return self.__play_count
 
-    # -- Setter dengan validasi (Enkapsulasi) --
+    # -- Setter --
     @judul.setter
     def judul(self, value: str):
         if not value.strip():
@@ -133,20 +114,82 @@ class Lagu(Media):
 
 
 # ============================================================
-# CLASS: Playlist  (Enkapsulasi + Polymorphism via Media)
+# CLASS: Podcast
+# ============================================================
+
+class Podcast(Media):
+
+    def __init__(self, judul: str, host: str, durasi: int, episode: int = 1):
+        self.__judul      = judul
+        self.__host       = host
+        self.__durasi     = durasi
+        self.__episode    = episode
+        self.__play_count = 0
+
+    # -- Getter --
+    @property
+    def judul(self) -> str:
+        return self.__judul
+
+    @property
+    def host(self) -> str:
+        return self.__host
+
+    @property
+    def episode(self) -> int:
+        return self.__episode
+
+    @property
+    def play_count(self) -> int:
+        return self.__play_count
+
+    # -- Setter --
+    @judul.setter
+    def judul(self, value: str):
+        if not value.strip():
+            raise ValueError("Judul tidak boleh kosong.")
+        self.__judul = value.strip()
+
+    @host.setter
+    def host(self, value: str):
+        if not value.strip():
+            raise ValueError("Nama host tidak boleh kosong.")
+        self.__host = value.strip()
+
+    def set_durasi(self, durasi: int):
+        if durasi <= 0:
+            raise ValueError("Durasi harus lebih dari 0.")
+        self.__durasi = durasi
+
+    # -- Method --
+    def increment_play(self):
+        self.__play_count += 1
+
+    def format_durasi(self) -> str:
+        return f"{self.__durasi // 60:02d}:{self.__durasi % 60:02d}"
+
+    def get_duration(self) -> int:
+        return self.__durasi
+
+    # -- Implementasi abstract method (berbeda dari Lagu -- POLYMORPHISM) --
+    def get_info(self) -> str:
+        return (f"[Podcast] {self.__judul} | Host: {self.__host}"
+                f" | Episode: {self.__episode} | Durasi: {self.format_durasi()}"
+                f" | Diputar: {self.__play_count}x")
+
+    def __str__(self) -> str:
+        return f"[Podcast Ep.{self.__episode}] {self.__judul} - {self.__host} ({self.format_durasi()})"
+
+
+# ============================================================
+# CLASS: Playlist
 # ============================================================
 
 class Playlist:
-    """
-    Kumpulan objek Lagu (turunan Media).
-    ENKAPSULASI : daftar lagu privat, diubah lewat method.
-    POLYMORPHISM: menerima semua turunan Media.
-    """
 
     def __init__(self, nama: str):
         self.__nama        = nama
         self.__lagu_list: list[Media] = []
-        self.__shuffled:  list[Media] = []
         self.__is_shuffled = False
 
     # -- Getter --
@@ -184,53 +227,54 @@ class Playlist:
         for item in self.__lagu_list:
             if item.judul.lower() == judul.lower():
                 self.__lagu_list.remove(item)
-                self.__is_shuffled = False
                 return True
         return False
 
-    def shuffle(self):
+    def shuffle(self) -> list:
         if not self.__lagu_list:
-            return False
-        self.__shuffled = self.__lagu_list.copy()
-        random.shuffle(self.__shuffled)
+            return []
+        acak = self.__lagu_list.copy()
+        random.shuffle(acak)
         self.__is_shuffled = True
-        return True
+        return acak
 
     def unshuffle(self):
-        self.__shuffled    = []
         self.__is_shuffled = False
 
-    def get_active_list(self) -> list[Media]:
-        return self.__shuffled if self.__is_shuffled else self.__lagu_list
+    def get_original_list(self) -> list[Media]:
+        return list(self.__lagu_list)
 
-    def get_item(self, index: int):
-        active = self.get_active_list()
-        return active[index] if 0 <= index < len(active) else None
+    def get_item(self, index: int, dari_list: list = None) -> Media:
+        target = dari_list if dari_list is not None else self.__lagu_list
+        return target[index] if 0 <= index < len(target) else None
 
     def __str__(self) -> str:
         return f"Playlist '{self.__nama}' ({self.total_lagu} lagu)"
 
 
 # ============================================================
-# CLASS: Player  (Enkapsulasi + Polymorphism)
+# CLASS: Player 
 # ============================================================
 
 class Player:
-    """
-    Pemutar lagu dari sebuah Playlist.
-    ENKAPSULASI : status internal (status, index) privat.
-    POLYMORPHISM: play() bekerja dengan semua turunan Media.
-    """
 
     PLAYING = "PLAYING"
     PAUSED  = "PAUSED"
     STOPPED = "STOPPED"
 
     def __init__(self):
-        self.__status   = self.STOPPED
-        self.__playlist = None
-        self.__index    = -1
-        self.__current  = None
+        self.__status         = self.STOPPED
+        self.__playlist       = None
+        self.__active_list: list[Media] = []   # urutan aktif (asli/shuffle)
+        self.__index          = -1
+        self.__current        = None
+        self.__is_shuffled    = False
+
+        # Timer
+        self.__sisa_detik     = 0       # sisa waktu lagu aktif
+        self.__timer_thread   = None
+        self.__timer_stop_evt = threading.Event()
+        self.__auto_next_cb   = None    # callback dipanggil saat lagu habis
 
     # -- Getter --
     @property
@@ -238,7 +282,7 @@ class Player:
         return self.__status
 
     @property
-    def current(self):
+    def current(self) -> Media:
         return self.__current
 
     @property
@@ -246,65 +290,147 @@ class Player:
         return self.__index
 
     @property
-    def playlist(self):
+    def playlist(self) -> Playlist:
         return self.__playlist
 
-    # -- Method --
+    @property
+    def is_shuffled(self) -> bool:
+        return self.__is_shuffled
+
+    @property
+    def sisa_detik(self) -> int:
+        return self.__sisa_detik
+
+    @property
+    def active_list(self) -> list:
+        return list(self.__active_list)
+
+    # -- Timer internal --
+    def __start_timer(self):
+        """Mulai thread hitung mundur."""
+        self.__stop_timer()
+        self.__timer_stop_evt.clear()
+        self.__timer_thread = threading.Thread(
+            target=self.__run_timer, daemon=True
+        )
+        self.__timer_thread.start()
+
+    def __stop_timer(self):
+        """Hentikan thread hitung mundur."""
+        if self.__timer_thread and self.__timer_thread.is_alive():
+            self.__timer_stop_evt.set()
+            self.__timer_thread.join(timeout=2)
+
+    def __run_timer(self):
+        """Thread: kurangi sisa_detik setiap 1 detik."""
+        while self.__sisa_detik > 0 and not self.__timer_stop_evt.is_set():
+            time.sleep(1)
+            if self.__timer_stop_evt.is_set():
+                break
+            self.__sisa_detik = max(0, self.__sisa_detik - 1)
+        # Lagu selesai secara alami -- jalankan callback di thread baru
+        # agar tidak deadlock saat callback memanggil next() -> stop_timer() -> join()
+        if not self.__timer_stop_evt.is_set() and self.__sisa_detik == 0:
+            if self.__auto_next_cb:
+                threading.Thread(target=self.__auto_next_cb, daemon=True).start()
+
+    def set_auto_next_callback(self, cb):
+        self.__auto_next_cb = cb
+
+    # -- Method utama --
     def load(self, playlist: Playlist):
-        self.__playlist = playlist
-        self.__index    = -1
-        self.__status   = self.STOPPED
-        self.__current  = None
+        self.__stop_timer()
+        self.__playlist    = playlist
+        self.__active_list = playlist.get_original_list()
+        self.__index       = -1
+        self.__status      = self.STOPPED
+        self.__current     = None
+        self.__sisa_detik  = 0
+        self.__is_shuffled = False
 
     def play(self):
         if self.__playlist is None:
             return False, "Tidak ada playlist yang dimuat."
+
+        # Resume dari PAUSED
         if self.__status == self.PAUSED and self.__current:
             self.__status = self.PLAYING
+            self.__start_timer()
             return True, f"Lanjut: {self.__current}"
+
+        # Mulai dari awal jika belum dimulai
         if self.__index < 0:
             self.__index = 0
-        item = self.__playlist.get_item(self.__index)
+
+        item = self.__playlist.get_item(self.__index, self.__active_list)
         if item is None:
             return False, "Playlist kosong."
-        self.__current = item
-        self.__status  = self.PLAYING
+
+        self.__stop_timer()
+        self.__current    = item
+        self.__status     = self.PLAYING
+        self.__sisa_detik = item.get_duration()
         item.increment_play()
-        return True, f"[{self.__index + 1}/{self.__playlist.total_lagu}] {item}"
+        self.__start_timer()
+
+        total = len(self.__active_list)
+        pesan = (f"[{self.__index + 1}/{total}] {item}\n"
+                 f"     {item.get_info()}")
+        return True, pesan
 
     def pause(self):
         if self.__status != self.PLAYING:
             return False, "Tidak sedang memutar lagu."
+        self.__stop_timer()
         self.__status = self.PAUSED
         return True, f"Dijeda: {self.__current}"
 
     def next(self):
-        if self.__playlist is None or self.__playlist.total_lagu == 0:
-            return False, "Tidak ada playlist atau playlist kosong."
-        self.__index  = (self.__index + 1) % self.__playlist.total_lagu
+        if not self.__active_list:
+            return False, "Playlist kosong."
+        self.__stop_timer()
+        self.__index  = (self.__index + 1) % len(self.__active_list)
         self.__status = self.STOPPED
         return self.play()
 
     def prev(self):
-        if self.__playlist is None or self.__playlist.total_lagu == 0:
-            return False, "Tidak ada playlist atau playlist kosong."
-        self.__index  = (self.__index - 1) % self.__playlist.total_lagu
+        if not self.__active_list:
+            return False, "Playlist kosong."
+        self.__stop_timer()
+        self.__index  = (self.__index - 1) % len(self.__active_list)
         self.__status = self.STOPPED
         return self.play()
 
     def shuffle(self):
         if self.__playlist is None:
             return False, "Tidak ada playlist yang dimuat."
-        if self.__playlist.is_shuffled:
-            self.__playlist.unshuffle()
-            self.__index = 0
-            return True, "Shuffle OFF - urutan dikembalikan."
-        else:
-            ok = self.__playlist.shuffle()
-            if not ok:
-                return False, "Playlist kosong."
-            self.__index = 0
-            return True, "Shuffle ON."
+        if self.__playlist.total_lagu == 0:
+            return False, "Playlist kosong."
+
+        acak = self.__playlist.shuffle()
+        self.__active_list = acak
+        self.__is_shuffled = True
+        self.__index       = 0
+        self.__stop_timer()
+        self.__status  = self.STOPPED
+        ok, msg = self.play()
+        return ok, "Shuffle: urutan diacak ulang. " + msg
+
+    def unshuffle(self):
+        if self.__playlist is None:
+            return False, "Tidak ada playlist yang dimuat."
+        self.__playlist.unshuffle()
+        self.__active_list = self.__playlist.get_original_list()
+        self.__is_shuffled = False
+        self.__index       = 0
+        self.__stop_timer()
+        self.__status  = self.STOPPED
+        ok, msg = self.play()
+        return ok, "Shuffle OFF - urutan dikembalikan. " + msg
+
+    def format_sisa(self) -> str:
+        d = self.__sisa_detik
+        return f"{d // 60:02d}:{d % 60:02d}"
 
     def __str__(self) -> str:
         return f"Player(status={self.__status})"
